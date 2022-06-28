@@ -190,6 +190,8 @@ impl FlagRegister {
 
         // Example value has 5 ones and the LSB is one, so it works! We just have to convert it to a bool
         val & 0b00000001 == 0
+
+        // Or could have used "val.count_ones()" like a normal person
     }
 
     pub fn set_artihmetic_flags(&mut self, val: u8) {
@@ -285,17 +287,19 @@ impl Intel8080 {
     // INR reg - Increment reg value
     fn inr(&mut self, reg_name: &str) {
         
-        let val: u8 = self.registers.get_reg(reg_name) + 1;
-        self.registers.set_reg(reg_name, val);
-        self.registers.f.set_artihmetic_flags(val);
+        let val: u8 = self.registers.get_reg(reg_name);
+        self.registers.set_reg(reg_name, val + 1);
+        self.registers.f.set_artihmetic_flags(val + 1);
 
         /*
-        Check that the lower four bits are all 0 by ANDing 0xF to the value e.g.
-            01110000 (Some value that was incremented by one)
-            00001111 (0xF)
-            00000000 -> True, carry happened from lower 4 bits to the upper ones
+        Check that the lower four bits are all 0 by ANDing 0xF to the pre-incremented value and adding one e.g.
+            01101111    Some value before it was incremented by one
+            00001111    0xF
+            00001111    AND operation
+            00010000    increment
+            Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
         */
-        self.registers.f.aux_carry = (val & 0xf) == 0;
+        self.registers.f.aux_carry = (val & 0xf) + 0x01 > 0x0f;
         
         self.advance_pc(1);
     }
@@ -307,10 +311,11 @@ impl Intel8080 {
         self.registers.f.set_artihmetic_flags(val);
 
         /*
-        Not quite sure why the flag is set when the decremented value's lower four bits are ones e.g.
-            01101111 (Some value that was decremented by one)
-            00001111 (0xF)
-            00001111 -> False, because borrow I guess?
+        Not quite sure why the flag is not set when the decremented value's lower four bits are ones e.g.
+            01101111    Some value that was decremented by one
+            00001111    0xF
+            00001111    AND operation
+            Equal to 0xF -> False, because borrow I guess?
         */
         self.registers.f.aux_carry = (val & 0xF) != 0xF;
 
@@ -325,10 +330,10 @@ impl Intel8080 {
 
     // DAD reg pair - Add given register pair to register pair HL
     fn dad(&mut self, reg_pair: &str) {
-        let val: u16 = self.registers.get_reg_pair(reg_pair) + self.registers.get_reg_pair("HL");
-        self.registers.set_reg_pair("HL", val);
+        let val: u32 = self.registers.get_reg_pair(reg_pair) as u32 + self.registers.get_reg_pair("HL") as u32;
+        self.registers.set_reg_pair("HL", val as u16);
 
-        // Check if adding the two reg pairs overflows over u16
+        // Check if adding the two reg pairs overflows over u16 max val
         self.registers.f.carry = val > 0xFFFF;
 
         self.advance_pc(1);
