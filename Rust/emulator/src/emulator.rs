@@ -385,7 +385,7 @@ impl Intel8080 {
                 // RLC - Rotate accumulator (reg A) left
                 let val = self.registers.get_reg("A");
 
-                // Copy the MSB to the carry flag 
+                // Copy the MSB to the carry flag
                 self.registers.f.carry = (val >> 7) == 1;
 
                 // Rotate reg left by one and use OR to move the MSB as LSB
@@ -415,7 +415,7 @@ impl Intel8080 {
                 self.inr("C");
             },
             0x0d => {
-                // DCR C
+                // DCR C - Decrement reg C
                 self.dcr("C");
             },
             0x0e => {
@@ -426,7 +426,7 @@ impl Intel8080 {
                 // RRC - Rotate accumulator (reg A) right
                 let val = self.registers.get_reg("A");
 
-                // Copy the LSB to the carry flag 
+                // Copy the LSB to the carry flag
                 self.registers.f.carry = (val & 0x1) == 1;
 
                 // Rotate reg right by one and use OR to move the LSB as MSB
@@ -435,25 +435,98 @@ impl Intel8080 {
 
                 self.advance_pc(1);
             },
-            /*
+            
             // 0x1x
-            0x10 => {println!("NOP*");},
-            0x11 => {println!("{:<width$} #{:#04x}{:02x}", "LXI D", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x12 => {println!("STAX D");},
-            0x13 => {println!("INX D");},
-            0x14 => {println!("INR D");},
-            0x15 => {println!("DCR D");},
-            0x16 => {println!("{:<width$} #{:#04x}", "MVI D", bytes[pc+1]); opcode_offset=2;},
-            0x17 => {println!("RAL");},
-            0x18 => {println!("NOP*");},
-            0x19 => {println!("DAD D");},
-            0x1a => {println!("LDAX D");},
-            0x1b => {println!("DCX D");},
-            0x1c => {println!("INR E");},
-            0x1d => {println!("DCR E");},
-            0x1e => {println!("{:<width$} #{:#04x}", "MVI E", bytes[pc+1]); opcode_offset=2;},
-            0x1f => {println!("RAR");},
+            0x10 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x11 => {
+                // LXI D - Load reg pair DE immediate
+                self.lxi("DE");
+            },
+            0x12 => {
+                // STAX D - Store accumulator to mem addr in reg pair DE
+                self.stax("DE");
+            },
+            0x13 => {
+                // INX D - Increment reg pair DE
+                self.inx("DE");
+            },
+            0x14 => {
+                // INR D - Increment reg D
+                self.inr("D");
+            },
+            0x15 => {
+                // DCR D - Decrement reg D
+                self.dcr("D");
+            },
+            0x16 => {
+                // MVI D - Move immediate D
+                self.mvi("D");
+            },
+            0x17 => {
+                // RAL - Rotate accumulator (reg A) left through carry
+                let val = self.registers.get_reg("A");
+
+                // Save current carry flag val before replacing it with the MSB of reg A
+                let temp: u8 = self.registers.f.carry as u8;
+
+                // Copy the MSB to the carry flag
+                self.registers.f.carry = (val >> 7) == 1;
+
+                // Rotate reg left by one and use OR to move the previous carry bit as LSB
+                let shifted_val: u8 = (val << 1) | temp;
+                self.registers.set_reg("A", shifted_val);
+
+                self.advance_pc(1);
+            },
+            0x18 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x19 => {
+                // DAD D - Add register pair DE to register pair HL
+                self.dad("DE");
+            },
+            0x1a => {
+                // LDAX D - Load accumulator indirect from reg pair DE
+                self.ldax("DE");
+            },
+            0x1b => {
+                // DCX D - Decrement reg pair DE
+                self.dcx("DE");
+            },
+            0x1c => {
+                // INR E - Increment reg E
+                self.inr("E");
+            },
+            0x1d => {
+                // DCR E - Decrement reg E
+                self.dcr("E");
+            },
+            0x1e => {
+                // MVI E - Move immediate E
+                self.mvi("E");
+            },
+            0x1f => {
+                // RAR - Rotate accumulator (reg A) right through carry
+                let val = self.registers.get_reg("A");
+
+                // Save current carry flag val before replacing it with the LSB of reg A
+                let temp: u8 = self.registers.f.carry as u8;
+
+                // Copy the LSB to the carry flag
+                self.registers.f.carry = (val & 0x1) == 1;
+
+                // Rotate reg right by one and use OR to move the previous carry bit as MSB
+                let shifted_val: u8 = (val >> 1) | (temp << 7);
+                self.registers.set_reg("A", shifted_val);
+
+                self.advance_pc(1);
+            },
     
+            /*
             // 0x2x
             0x20 => {println!("NOP*");},
             0x21 => {println!("{:<width$} #{:#04x}{:02x}", "LXI H", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
@@ -717,17 +790,21 @@ impl Intel8080 {
     }
 
     pub fn test(&mut self) {
-        self.registers.set_reg("A", 0b10101010);
+        self.registers.set_reg("A", 0b01010101);
+        //self.registers.f.carry = true;
         println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
         
         let val = self.registers.get_reg("A");
 
+        // Save current carry flag val before replacing it with the LSB of reg A
+        let temp: u8 = self.registers.f.carry as u8;
+
         // Copy the LSB to the carry flag 
         self.registers.f.carry = (val & 0x1) == 1;
 
-        // Rotate reg right by one and use OR to move the LSB as MSB
-        let shifted_val: u8 = (val >> 1) | ((self.registers.f.carry as u8) << 7);
+        // Rotate reg right by one and use OR to move the previous carry bit as MSB
+        let shifted_val: u8 = (val >> 1) | (temp << 7);
         self.registers.set_reg("A", shifted_val);
 
         println!("FLAGS: {:#?}\n", self.registers.f);
