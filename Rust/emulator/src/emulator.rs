@@ -28,7 +28,7 @@ struct Registers {
 
     // Special registers
     sp: u16,    // Stack Pointer
-    pc: u16,    // Program Counter
+    pc: usize,  // Program Counter
     int: u8,    // Interrupt enable
 }
 
@@ -45,8 +45,7 @@ struct FlagRegister {
 }
 
 impl Registers {
-    pub fn get_reg_pair(&self, pair: &str) -> usize {
-
+    pub fn get_reg_pair(&self, pair: &str) -> u16 {
         // Create a single u16 value from the u8 reg pairs by shifting the upper reg by 8
         let data: u16 = match pair {
             "BC" => {
@@ -66,10 +65,10 @@ impl Registers {
             },
         };
 
-        data as usize
+        data
     }
 
-    pub fn set_reg_pair(&mut self, reg_pair: &str, val: usize) {
+    pub fn set_reg_pair(&mut self, reg_pair: &str, val: u16) {
         let (mut high, mut low) = match reg_pair {
             "BC" => {
                  (&mut self.b, &mut self.c)
@@ -165,10 +164,6 @@ impl Registers {
 
         *reg = val;
     }
-
-    fn advance_pc(&mut self, i: u16) {
-        self.pc += i;
-    }
 }
 
 impl FlagRegister {
@@ -256,84 +251,191 @@ impl Intel8080 {
         Ok(())
     }
 
+    fn advance_pc(&mut self, val: usize) {
+        self.registers.pc += val;
+    }
+
+    // No operation
+    fn nop(&mut self) {
+        self.advance_pc(1);
+    }
+
+    // LXI reg pair - Load to reg pair the immediate value from addr
+    fn lxi(&mut self, reg_pair: &str) {
+        let val: u16 = (self.mem[self.registers.pc + 1] as u16) << 8 | self.mem[self.registers.pc + 2] as u16;
+        self.registers.set_reg_pair(reg_pair, val);
+        
+        self.advance_pc(3);
+    }
+
+    // STAX reg pair - Store accumulator to the mem addr in reg pair
+    fn stax(&mut self, reg_pair: &str) {
+        let mem_addr: usize = self.registers.get_reg_pair(reg_pair).into();
+        self.mem[mem_addr] = self.registers.a;
+        
+        self.advance_pc(1);
+    }
+
+    // INX reg pair - Increment reg pair value
+    fn inx(&mut self, reg_pair: &str) {
+        self.registers.set_reg_pair(reg_pair, self.registers.get_reg_pair(reg_pair) + 1);
+        self.advance_pc(1);
+    }
+
+    // INR reg - Increment reg value
+    fn inr(&mut self, reg_name: &str) {
+        
+        let val: u8 = self.registers.get_reg(reg_name) + 1;
+        self.registers.set_reg(reg_name, val);
+        self.registers.f.set_artihmetic_flags(val);
+
+        /*
+        Check that the lower four bits are all 0 by ANDing 0xF to the value e.g.
+            01110000 (Some value that was incremented by one)
+            00001111 (0xF)
+            00000000 -> True, carry happened from lower 4 bits to the upper ones
+        */
+        self.registers.f.aux_carry = (val & 0xf) == 0;
+        
+        self.advance_pc(1);
+    }
+
+    // DCR reg - Decrement reg value
+    fn dcr(&mut self, reg_name: &str) {
+        let val: u8 = self.registers.get_reg(reg_name) - 1;
+        self.registers.set_reg(reg_name, val);
+        self.registers.f.set_artihmetic_flags(val);
+
+        /*
+        Not quite sure why the flag is set when the decremented value's lower four bits are ones e.g.
+            01101111 (Some value that was decremented by one)
+            00001111 (0xF)
+            00001111 -> False, because borrow I guess?
+        */
+        self.registers.f.aux_carry = (val & 0xF) != 0xF;
+
+        self.advance_pc(1);
+    }
+
+    // MVI reg - Move immediate value to reg
+    fn mvi(&mut self, reg_name: &str) {
+        self.registers.set_reg(reg_name, self.mem[self.registers.pc + 1]);
+        self.advance_pc(2);
+    }
+
+    // DAD reg pair - Add given register pair to register pair HL
+    fn dad(&mut self, reg_pair: &str) {
+        let val: u16 = self.registers.get_reg_pair(reg_pair) + self.registers.get_reg_pair("HL");
+        self.registers.set_reg_pair("HL", val);
+
+        // Check if adding the two reg pairs overflows over u16
+        self.registers.f.carry = val > 0xFFFF;
+
+        self.advance_pc(1);
+    }
+
+    // LDAX reg pair - Load to accumulator indirect value from reg pair
+    fn ldax(&mut self, reg_pair: &str) {
+        let mem_addr: usize = self.registers.get_reg_pair(reg_pair).into();
+        self.registers.set_reg("A", self.mem[mem_addr]);
+
+        self.advance_pc(1);
+    }
+
+    // DCX reg pair - Decrement reg pair value
+    fn dcx(&mut self, reg_pair: &str) {
+        self.registers.set_reg_pair(reg_pair, self.registers.get_reg_pair(reg_pair) - 1);
+        self.advance_pc(1);
+    }
+
     // Execute the matching opcode and set the registers to their corresponding state
     fn exec_opcode(&mut self) {
-
-        let program_counter = self.registers.pc as usize;
-        let mut opcode_offset: u16 = 1;
-
-        match self.mem[program_counter] {
+        match self.mem[self.registers.pc] {
         
             // 0x0x
             0x00 => {
                 // NOP - No operation
+                self.nop();
             },
             0x01 => {
                 // LXI B - Load reg pair BC immediate
-                self.registers.b = self.mem[program_counter + 2];
-                self.registers.c = self.mem[program_counter + 1];
-                opcode_offset = 3;
+                self.lxi("BC");
             },
             0x02 => {
-                // STAX B - Store accumulator indirect BC
-                let mem_addr: usize = self.registers.get_reg_pair("BC");
-                self.mem[mem_addr] = self.registers.a;
+                // STAX B - Store accumulator to mem addr in reg pair BC
+                self.stax("BC");
             },
             0x03 => {
                 // INX B - Increment reg pair BC
-                self.registers.set_reg_pair("BC", self.registers.get_reg_pair("BC") + 1);
+                self.inx("BC");
             },
             0x04 => {
                 // INR B - Increment reg B
-                let val: u8 = self.registers.get_reg("B") + 1;
-                self.registers.set_reg("B", val);
-                self.registers.f.set_artihmetic_flags(val);
-
-                /*
-                Check that the lower four bits are all 0 by ANDing 0xF to the value e.g.
-                    01110000 (Some value that was incremented by one)
-                    00001111 (0xF)
-                    00000000 -> True, carry happened from lower 4 bits to the upper ones
-                */
-                self.registers.f.aux_carry = val & 0xf == 0;
+                self.inr("B");
             },
             0x05 => {
                 // DCR B - Decrement reg B
-                let val: u8 = self.registers.get_reg("B") - 1;
-                self.registers.set_reg("B", val);
-                self.registers.f.set_artihmetic_flags(val);
-
-                /*
-                Not quite sure why the flag is set when the decremented value's lower four bits are ones e.g.
-                    01101111 (Some value that was decremented by one)
-                    00001111 (0xF)
-                    00001111 -> False, because borrow I guess?
-                */
-                self.registers.f.aux_carry = val & 0xF != 0x0f;
+                self.dcr("B");
             },
             0x06 => {
                 // MVI B - Move immediate B
-                self.registers.set_reg("B", self.mem[program_counter + 1]);
-                opcode_offset = 2;
+                self.mvi("B");
             },
             0x07 => {
                 // RLC - Rotate accumulator (reg A) left
                 let val = self.registers.get_reg("A");
+
+                // Copy the MSB to the carry flag 
                 self.registers.f.carry = (val >> 7) == 1;
 
+                // Rotate reg left by one and use OR to move the MSB as LSB
                 let shifted_val: u8 = (val << 1) | (self.registers.f.carry as u8);
                 self.registers.set_reg("A", shifted_val);
+
+                self.advance_pc(1);
+            },
+            0x08 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x09 => {
+                // DAD B - Add register pair BC to register pair HL
+                self.dad("BC");
+            },
+            0x0a => {
+                // LDAX B - Load accumulator indirect from reg pair BC
+                self.ldax("BC");
+            },
+            0x0b => {
+                // DCX B - Decrement reg pair BC
+                self.dcx("BC");
+            },
+            0x0c => {
+                // INR C - Increment reg C
+                self.inr("C");
+            },
+            0x0d => {
+                // DCR C
+                self.dcr("C");
+            },
+            0x0e => {
+                // MVI C - Move immediate C
+                self.mvi("C");
+            },
+            0x0f => {
+                // RRC - Rotate accumulator (reg A) right
+                let val = self.registers.get_reg("A");
+
+                // Copy the LSB to the carry flag 
+                self.registers.f.carry = (val & 0x1) == 1;
+
+                // Rotate reg right by one and use OR to move the LSB as MSB
+                let shifted_val: u8 = (val >> 1) | ((self.registers.f.carry as u8) << 7);
+                self.registers.set_reg("A", shifted_val);
+
+                self.advance_pc(1);
             },
             /*
-            0x08 => {println!("NOP*");},
-            0x09 => {println!("DAD B");},
-            0x0a => {println!("LDAX B");},
-            0x0b => {println!("DCX B");},
-            0x0c => {println!("INR C");},
-            0x0d => {println!("DCR C");},
-            0x0e => {println!("{:<width$} #{:#04x}", "MVI C", bytes[pc+1]); opcode_offset=2;},
-            0x0f => {println!("RRC");},
-            /
             // 0x1x
             0x10 => {println!("NOP*");},
             0x11 => {println!("{:<width$} #{:#04x}{:02x}", "LXI D", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
@@ -606,8 +708,6 @@ impl Intel8080 {
             */
             _ => {/* Bork */},
         };
-
-        self.registers.advance_pc(opcode_offset);
     }
 
     pub fn emulate(&mut self) {
@@ -617,15 +717,19 @@ impl Intel8080 {
     }
 
     pub fn test(&mut self) {
-        self.registers.set_reg("A", 0b00100000);
+        self.registers.set_reg("A", 0b10101010);
         println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
         
         let val = self.registers.get_reg("A");
-        self.registers.f.carry = (val >> 7) == 1;
-        let shifted_val: u8 = (val << 1) | (self.registers.f.carry as u8);
+
+        // Copy the LSB to the carry flag 
+        self.registers.f.carry = (val & 0x1) == 1;
+
+        // Rotate reg right by one and use OR to move the LSB as MSB
+        let shifted_val: u8 = (val >> 1) | ((self.registers.f.carry as u8) << 7);
         self.registers.set_reg("A", shifted_val);
-        
+
         println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
     }
