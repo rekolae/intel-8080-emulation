@@ -69,7 +69,7 @@ impl Registers {
     }
 
     pub fn set_reg_pair(&mut self, reg_pair: &str, val: u16) {
-        let (mut high, mut low) = match reg_pair {
+        let (high, low) = match reg_pair {
             "BC" => {
                  (&mut self.b, &mut self.c)
             },
@@ -128,7 +128,7 @@ impl Registers {
     }
 
     pub fn set_reg(&mut self, reg_name: &str, val: u8) {
-        let mut reg = match reg_name {
+        let reg = match reg_name {
             "B" => {
                 &mut self.b
             },
