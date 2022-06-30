@@ -257,6 +257,12 @@ impl Intel8080 {
         self.registers.pc += val;
     }
 
+    // Return the next 2 bytes in memory
+    fn get_word(&self) -> u16 {
+        // Take into account that the 8080 is little endian, so the first byte is actually the lower part of the value
+        (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16
+    }
+
     // No operation
     fn nop(&mut self) {
         self.advance_pc(1);
@@ -264,7 +270,7 @@ impl Intel8080 {
 
     // LXI reg pair - Load to reg pair the immediate value from addr
     fn lxi(&mut self, reg_pair: &str) {
-        let val: u16 = (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16;
+        let val: u16 = self.get_word();
         self.registers.set_reg_pair(reg_pair, val);
         
         self.advance_pc(3);
@@ -546,7 +552,7 @@ impl Intel8080 {
                 let h: u8 = self.registers.get_reg("H");
                 let l: u8 = self.registers.get_reg("L");
 
-                let addr: u16 = (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16;
+                let addr: u16 = self.get_word();
 
                 self.mem[addr as usize] = l;
                 self.mem[(addr + 1) as usize] = h;
@@ -619,7 +625,7 @@ impl Intel8080 {
             },
             0x2a => {
                 // LHLD - Load reg H and reg L from mem addr given in pc+1 and pc+2
-                let addr: u16 = (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16;
+                let addr: u16 = self.get_word();
 
                 self.registers.set_reg("L", self.mem[addr as usize]);
                 self.registers.set_reg("H", self.mem[(addr + 1) as usize]);
@@ -651,25 +657,126 @@ impl Intel8080 {
                 self.advance_pc(1);
             },
     
-            /*
             // 0x3x
-            0x30 => {println!("NOP*");},
-            0x31 => {println!("{:<width$} #{:#04x}{:02x}", "LXI SP", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x32 => {println!("{:<width$} {:#04x}{:02x}", "STA", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x33 => {println!("INX SP");},
-            0x34 => {println!("INR M");},
-            0x35 => {println!("DCR M");},
-            0x36 => {println!("{:<width$} #{:#04x}", "MVI M", bytes[pc+1]); opcode_offset=2;},
-            0x37 => {println!("STC");},
-            0x38 => {println!("NOP*");},
-            0x39 => {println!("DAD SP");},
-            0x3a => {println!("{:<width$} {:#04x}{:02x}", "LDA", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x3b => {println!("DCX SP");},
-            0x3c => {println!("INR A");},
-            0x3d => {println!("DCR A");},
-            0x3e => {println!("{:<width$} #{:#04x}", "MVI A", bytes[pc+1]); opcode_offset=2;},
-            0x3f => {println!("CMC");},
+            0x30 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x31 => {
+                // LXI SP - Load reg Stack Pointer immediate
+                let val: u16 = self.get_word();
+                self.registers.sp = val;
+
+                self.advance_pc(3);
+            },
+            0x32 => {
+                // STA - Store accumulator direct
+                let addr: u16 = self.get_word();
+                self.mem[addr as usize] = self.registers.get_reg("A");
+
+                self.advance_pc(3);
+            },
+            0x33 => {
+                // INX SP - Increment stack pointer
+                self.registers.sp = self.registers.sp.wrapping_add(1);
+                self.advance_pc(1);
+            },
+            0x34 => {
+                // INR M - Increment byte in memory pointed by reg pair HL
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                let val: u8 = self.mem[addr];
+                let incremented_val: u8 = val.wrapping_add(1);
+
+                self.mem[addr] = incremented_val;
+                self.registers.f.set_artihmetic_flags(incremented_val);
+
+                /*
+                Check that the lower four bits are all 0 by ANDing 0xF to the pre-incremented value and adding one e.g.
+                    01101111    Some value before it was incremented by one
+                    00001111    0xF
+                    00001111    AND operation
+                    00010000    increment
+                    Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
+                */
+                self.registers.f.aux_carry = (val & 0xf) + 0x01 > 0x0f;
+
+                self.advance_pc(1);
+            },
+            0x35 => {
+                // DCR M - Decrement byte in memory pointed by reg pair HL
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                let val: u8 = self.mem[addr].wrapping_sub(1);
+
+                self.mem[addr] = val;
+                self.registers.f.set_artihmetic_flags(val);
+
+                /*
+                Not quite sure why the flag is not set when the decremented value's lower four bits are ones e.g.
+                    01101111    Some value that was decremented by one
+                    00001111    0xF
+                    00001111    AND operation
+                    Equal to 0xF -> False, because borrow I guess?
+                */
+                self.registers.f.aux_carry = (val & 0xF) != 0xF;
+
+                self.advance_pc(1);
+            },
+            0x36 => {
+                // MVI M - Move immediate value to mem addr pointed by reg pair HL
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.mem[addr] = self.mem[self.registers.pc + 1];
+                self.advance_pc(2);
+            },
+            0x37 => {
+                // STC - Set carry
+                self.registers.f.carry = true;
+                self.advance_pc(1);
+            },
+            0x38 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x39 => {
+                // DAD SP - Add SP to register pair HL
+                let val: u32 = self.registers.sp as u32 + self.registers.get_reg_pair("HL") as u32;
+                self.registers.sp = val as u16;
+
+                // Check if adding the two reg pairs overflows over u16 max val
+                self.registers.f.carry = val > 0xFFFF;
+
+                self.advance_pc(1);
+            },
+            0x3a => {
+                // LDA - Load byte from mem to accumulator
+                let addr: u16 = self.get_word();
+                self.registers.set_reg("A", self.mem[addr as usize]);
+
+                self.advance_pc(3);
+            },
+            0x3b => {
+                // DCX SP - Decrement stack pointer
+                self.registers.sp = self.registers.sp.wrapping_sub(1);
+                self.advance_pc(1);
+            },
+            0x3c => {
+                // INR A - Increment reg A
+                self.inr("A");
+            },
+            0x3d => {
+                // DCR A - Decrement reg A
+                self.dcr("A");
+            },
+            0x3e => {
+                // MVI A - Move immediate A
+                self.mvi("A");
+            },
+            0x3f => {
+                // CMC - Complement carry
+                self.registers.f.carry = !self.registers.f.carry;
+                self.advance_pc(1);
+            },
     
+            /*
             // 0x4x
             0x40 => {println!("MOV B,B");},
             0x41 => {println!("MOV B,C");},
