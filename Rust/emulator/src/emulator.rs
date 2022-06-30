@@ -305,6 +305,13 @@ impl Intel8080 {
         self.advance_pc(1);
     }
 
+    // MOV src reg, byte from mem - Move byte from src reg to mem pointed to by reg pair HL
+    fn mov_r(&mut self, src: &str) {
+        let addr: usize = self.registers.get_reg_pair("HL").into();
+        self.mem[addr] = self.registers.get_reg(src);
+        self.advance_pc(1);
+    }
+
     // Execute the matching opcode and set the registers to their corresponding state
     fn exec_opcode(&mut self) {
         match self.mem[self.registers.pc] {
@@ -787,61 +794,206 @@ impl Intel8080 {
                 self.mov("C", "A");
             },
     
-            /*
             // 0x5x
-            0x50 => {println!("MOV D,B");},
-            0x51 => {println!("MOV D,C");},
-            0x52 => {println!("MOV D,D");},
-            0x53 => {println!("MOV D,E");},
-            0x54 => {println!("MOV D,H");},
-            0x55 => {println!("MOV D,L");},
-            0x56 => {println!("MOV D,M");},
-            0x57 => {println!("MOV D,A");},
-            0x58 => {println!("MOV E,B");},
-            0x59 => {println!("MOV E,C");},
-            0x5a => {println!("MOV E,D");},
-            0x5b => {println!("MOV E,E");},
-            0x5c => {println!("MOV E,H");},
-            0x5d => {println!("MOV E,L");},
-            0x5e => {println!("MOV E,M");},
-            0x5f => {println!("MOV E,A");},
+            0x50 => {
+                // MOV D,B - Move to reg D value from reg B
+                self.mov("D", "B");
+            },
+            0x51 => {
+                // MOV D,C - Move to reg D value from reg C
+                self.mov("D", "C");
+            },
+            0x52 => {
+                // MOV D,D - Move reg D to reg D
+                self.nop();
+            },
+            0x53 => {
+                // MOV D,E - Move to reg D value from reg E
+                self.mov("D", "E");
+            },
+            0x54 => {
+                // MOV D,H - Move to reg D value from reg H
+                self.mov("D", "H");
+            },
+            0x55 => {
+                // MOV D,L - Move to reg D value from reg L
+                self.mov("D", "L");
+            },
+            0x56 => {
+                // MOV D,M - Move to reg D value from mem pointed to by reg pair HL
+                self.mov_m("D");
+            },
+            0x57 => {
+                // MOV D,A - Move to reg D value from reg A
+                self.mov("D", "A");
+            },
+            0x58 => {
+                // MOV E,B - Move to reg E value from reg B
+                self.mov("E", "B");
+            },
+            0x59 => {
+                // MOV E,C - Move to reg E value from reg C
+                self.mov("E", "C");
+            },
+            0x5a => {
+                // MOV E,D - Move to reg E value from reg D
+                self.mov("E", "D");
+            },
+            0x5b => {
+                // MOV E,E - Move reg E to reg E
+                self.nop();
+            },
+            0x5c => {
+                // MOV E,H - Move to reg E value from reg H
+                self.mov("E", "H");
+            },
+            0x5d => {
+                // MOV E,L - Move to reg E value from reg L
+                self.mov("E", "L");
+            },
+            0x5e => {
+                // MOV E,M - Move to reg E value from mem pointed to by reg pair HL
+                self.mov_m("E");
+            },
+            0x5f => {
+                // MOV E,A - Move to reg E value from reg A
+                self.mov("E", "A");
+            },
     
             // 0x6x
-            0x60 => {println!("MOV H,B");},
-            0x61 => {println!("MOV H,C");},
-            0x62 => {println!("MOV H,D");},
-            0x63 => {println!("MOV H,E");},
-            0x64 => {println!("MOV H,H");},
-            0x65 => {println!("MOV H,L");},
-            0x66 => {println!("MOV H,M");},
-            0x67 => {println!("MOV H,A");},
-            0x68 => {println!("MOV L,B");},
-            0x69 => {println!("MOV L,C");},
-            0x6a => {println!("MOV L,D");},
-            0x6b => {println!("MOV L,E");},
-            0x6c => {println!("MOV L,H");},
-            0x6d => {println!("MOV L,L");},
-            0x6e => {println!("MOV L,M");},
-            0x6f => {println!("MOV L,A");},
+            0x60 => {
+                // MOV H,B - Move to reg H value from reg B
+                self.mov("H", "B");
+            },
+            0x61 => {
+                // MOV H,C - Move to reg H value from reg C
+                self.mov("H", "C");
+            },
+            0x62 => {
+                // MOV H,D - Move to reg H value from reg D
+                self.mov("H", "D");
+            },
+            0x63 => {
+                // MOV H,E - Move to reg H value from reg E
+                self.mov("H", "E");
+            },
+            0x64 => {
+                // MOV H,H - Move reg H to reg H
+                self.nop();
+            },
+            0x65 => {
+                // MOV H,L - Move to reg H value from reg L
+                self.mov("H", "L");
+            },
+            0x66 => {
+                // MOV H,M - Move to reg H value from mem pointed to by reg pair HL
+                self.mov_m("H");
+            },
+            0x67 => {
+                // MOV H,A - Move to reg H value from reg A
+                self.mov("H", "A");
+            },
+            0x68 => {
+                // MOV L,B - Move to reg L value from reg B
+                self.mov("L", "B");
+            },
+            0x69 => {
+                // MOV L,C - Move to reg L value from reg C
+                self.mov("L", "C");
+            },
+            0x6a => {
+                // MOV L,D - Move to reg L value from reg D
+                self.mov("L", "D");
+            },
+            0x6b => {
+                // MOV L,E - Move to reg L value from reg E
+                self.mov("L", "E");
+            },
+            0x6c => {
+                // MOV L,H - Move to reg L value from reg H
+                self.mov("L", "H");
+            },
+            0x6d => {
+                // MOV L,L - Move reg L to reg L
+                self.nop();
+            },
+            0x6e => {
+                // MOV L,M - Move to reg L value from mem pointed to by reg pair HL
+                self.mov_m("L");
+            },
+            0x6f => {
+                // MOV L,A - Move to reg L value from reg A
+                self.mov("L", "A");
+            },
     
             // 0x7x
-            0x70 => {println!("MOV M,B");},
-            0x71 => {println!("MOV M,C");},
-            0x72 => {println!("MOV M,D");},
-            0x73 => {println!("MOV M,E");},
-            0x74 => {println!("MOV M,H");},
-            0x75 => {println!("MOV M,L");},
-            0x76 => {println!("HLT");},
-            0x77 => {println!("MOV M,A");},
-            0x78 => {println!("MOV A,B");},
-            0x79 => {println!("MOV A,C");},
-            0x7a => {println!("MOV A,D");},
-            0x7b => {println!("MOV A,E");},
-            0x7c => {println!("MOV A,H");},
-            0x7d => {println!("MOV A,L");},
-            0x7e => {println!("MOV A,M");},
-            0x7f => {println!("MOV A,A");},
+            0x70 => {
+                // MOV M,B - Move to mem pointed to by reg pair HL from reg B value
+                self.mov_r("B");
+            },
+            0x71 => {
+                // MOV M,C - Move to mem pointed to by reg pair HL from reg C value
+                self.mov_r("C");
+            },
+            0x72 => {
+                // MOV M,D - Move to mem pointed to by reg pair HL from reg D value
+                self.mov_r("D");
+            },
+            0x73 => {
+                // MOV M,E - Move to mem pointed to by reg pair HL from reg E value
+                self.mov_r("E");
+            },
+            0x74 => {
+                // MOV M,H - Move to mem pointed to by reg pair HL from reg H value
+                self.mov_r("H");
+            },
+            0x75 => {
+                // MOV M,L - Move to mem pointed to by reg pair HL from reg L value
+                self.mov_r("L");
+            },
+            0x76 => {
+                // HLT - Halt execution
+                self.halted = true;
+                self.advance_pc(1);
+            },
+            0x77 => {
+                // MOV M,A - Move to mem pointed to by reg pair HL from reg A value
+                self.mov_r("A");
+            },
+            0x78 => {
+                // MOV A,B - Move to reg A value from reg B
+                self.mov("A", "B");
+            },
+            0x79 => {
+                // MOV A,C - Move to reg A value from reg C
+                self.mov("A", "C");
+            },
+            0x7a => {
+                // MOV A,D - Move to reg A value from reg D
+                self.mov("A", "D");
+            },
+            0x7b => {
+                // MOV A,E - Move to reg A value from reg E
+                self.mov("A", "E");
+            },
+            0x7c => {
+                // MOV A,H - Move to reg A value from reg H
+                self.mov("A", "H");
+            },
+            0x7d => {
+                // MOV A,L - Move to reg A value from reg L
+                self.mov("A", "L");
+            },
+            0x7e => {
+                // MOV A,M - Move to reg A value from mem pointed to by reg pair HL
+                self.mov_m("A");
+            },
+            0x7f => {
+                // MOV A,A - Move reg A to reg A
+                self.nop();
+            },
     
+            /*
             // 0x8x
             0x80 => {println!("ADD B");},
             0x81 => {println!("ADD C");},
