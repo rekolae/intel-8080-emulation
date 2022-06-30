@@ -531,25 +531,125 @@ impl Intel8080 {
                 self.advance_pc(1);
             },
     
-            /*
             // 0x2x
-            0x20 => {println!("NOP*");},
-            0x21 => {println!("{:<width$} #{:#04x}{:02x}", "LXI H", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x22 => {println!("{:<width$} {:#04x}{:02x}", "SHLD", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x23 => {println!("INX H");},
-            0x24 => {println!("INR H");},
-            0x25 => {println!("DCR H");},
-            0x26 => {println!("{:<width$} #{:#04x}", "MVI H", bytes[pc+1]); opcode_offset=2;},
-            0x27 => {println!("DAA");},
-            0x28 => {println!("NOP*");},
-            0x29 => {println!("DAD H");},
-            0x2a => {println!("{:<width$} {:#04x}{:02x}", "LHLD", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0x2b => {println!("DCX H");},
-            0x2c => {println!("INR L");},
-            0x2d => {println!("DCR L");},
-            0x2e => {println!("{:<width$} #{:#04x}", "MVI L", bytes[pc+1]); opcode_offset=2;},
-            0x2f => {println!("CMA");},
+            0x20 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x21 => {
+                // LXI H - Load reg pair HL immediate
+                self.lxi("HL");
+            },
+            0x22 => {
+                // SHLD - Store reg H and reg L into mem addr given in pc+1 and pc+2
+                let h: u8 = self.registers.get_reg("H");
+                let l: u8 = self.registers.get_reg("L");
+
+                let addr: u16 = (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16;
+
+                self.mem[addr as usize] = l;
+                self.mem[(addr + 1) as usize] = h;
+
+                self.advance_pc(3);
+            },
+            0x23 => {
+                // INX H - Increment reg pair HL
+                self.inx("HL");
+            },
+            0x24 => {
+                // INR H - Increment reg H
+                self.inr("H");
+            },
+            0x25 => {
+                // DCR H - Decrement reg H
+                self.dcr("H");
+            },
+            0x26 => {
+                // MVI H - Move immediate H
+                self.mvi("H");
+            },
+            0x27 => {
+                // DAA - Decimal adjust accumulator
+
+                // Get the lower 4 bits of the accumulator
+                let lower: u8 = self.registers.get_reg("A") & 0xF;
+
+                // If lower 4 bits is greater than 9 or aux carry is set -> 6 is added to the lower 4 bits of the reg A
+                if lower > 9 || self.registers.f.aux_carry {
+
+                    // If the lower 4 bits overflow because of the addition, set aux carry flag
+                    if lower + 6 > 0xF {
+                        self.registers.f.aux_carry = true;
+                    }
+
+                    // Otherwise clear it
+                    else {
+                        self.registers.f.aux_carry = false;
+                    }
+
+                    // Use wrapping_add to manage possible overflows
+                    self.registers.set_reg("A", self.registers.get_reg("A").wrapping_add(0x6));
+                }
+
+                // Get upper 4 bits of the accumulator after it might have been incremented
+                let upper: u8 = self.registers.get_reg("A") >> 4;
+
+                // If upper 4 bits is greater than 9 or carry is set -> 6 is added to the upper 4 bits of the reg A
+                if upper > 9 || self.registers.f.carry {
+
+                    // If the upper 4 bits overflow because of the addition, set carry flag
+                    if upper + 6 > 0xF {
+                        self.registers.f.carry = true;
+                    }
+
+                    // Use wrapping_add to manage possible overflows
+                    self.registers.set_reg("A", self.registers.get_reg("A").wrapping_add(0x60));
+                }
+
+                // Set sign, zero and parity flags
+                self.registers.f.set_artihmetic_flags(self.registers.get_reg("A"));
+            },
+            0x28 => {
+                // NOP* - No operation (alternate)
+                self.nop();
+            },
+            0x29 => {
+                // DAD H - Add register pair HL to register pair HL
+                self.dad("HL");
+            },
+            0x2a => {
+                // LHLD - Load reg H and reg L from mem addr given in pc+1 and pc+2
+                let addr: u16 = (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16;
+
+                self.registers.set_reg("L", self.mem[addr as usize]);
+                self.registers.set_reg("H", self.mem[(addr + 1) as usize]);
+
+                self.advance_pc(3);
+            },
+            0x2b => {
+                // DCX H - Decrement reg pair HL
+                self.dcx("HL");
+            },
+            0x2c => {
+                // INR L - Increment reg L
+                self.inr("L");
+            },
+            0x2d => {
+                // DCR L - Decrement reg L
+                self.dcr("L");
+            },
+            0x2e => {
+                // MVI E - Move immediate E
+                self.mvi("L");
+            },
+            0x2f => {
+                // CMA - Complement accumulator
+
+                // This one is simple, just invert all of the bits
+                self.registers.set_reg("A", !self.registers.get_reg("A"));
+            },
     
+            /*
             // 0x3x
             0x30 => {println!("NOP*");},
             0x31 => {println!("{:<width$} #{:#04x}{:02x}", "LXI SP", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
@@ -795,24 +895,15 @@ impl Intel8080 {
     }
 
     pub fn test(&mut self) {
-        self.registers.set_reg("A", 0b01010101);
+        self.registers.set_reg("A", 0b11001100);
+        //self.registers.set_reg_pair("HL", 0xF00F);
         //self.registers.f.carry = true;
-        println!("FLAGS: {:#?}\n", self.registers.f);
+        //println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
-        
-        let val = self.registers.get_reg("A");
 
-        // Save current carry flag val before replacing it with the LSB of reg A
-        let temp: u8 = self.registers.f.carry as u8;
+        self.registers.set_reg("A", !self.registers.get_reg("A"));
 
-        // Copy the LSB to the carry flag 
-        self.registers.f.carry = (val & 0x1) == 1;
-
-        // Rotate reg right by one and use OR to move the previous carry bit as MSB
-        let shifted_val: u8 = (val >> 1) | (temp << 7);
-        self.registers.set_reg("A", shifted_val);
-
-        println!("FLAGS: {:#?}\n", self.registers.f);
+        //println!("\nFLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
     }
 }
