@@ -48,21 +48,10 @@ impl Registers {
     pub fn get_reg_pair(&self, pair: &str) -> u16 {
         // Create a single u16 value from the u8 reg pairs by shifting the upper reg by 8
         let data: u16 = match pair {
-            "BC" => {
-                (self.b as u16) << 8 | self.c as u16
-            },
-            
-            "DE" => {
-                (self.d as u16) << 8 | self.e as u16
-            },
-
-            "HL" => {
-                (self.h as u16) << 8 | self.l as u16
-            },
-
-            _ => {
-                panic!("Unknown reg pair {}", pair);
-            },
+            "BC" => (self.b as u16) << 8 | self.c as u16,
+            "DE" => (self.d as u16) << 8 | self.e as u16,
+            "HL" => (self.h as u16) << 8 | self.l as u16,
+            _ => panic!("Unknown reg pair {}", pair),
         };
 
         data
@@ -70,21 +59,10 @@ impl Registers {
 
     pub fn set_reg_pair(&mut self, reg_pair: &str, val: u16) {
         let (high, low) = match reg_pair {
-            "BC" => {
-                 (&mut self.b, &mut self.c)
-            },
-            
-            "DE" => {
-                (&mut self.d, &mut self.e)
-            },
-
-            "HL" => {
-                (&mut self.h, &mut self.l)
-            },
-
-            _ => {
-                panic!("Unknown reg pair {}", reg_pair);
-            },
+            "BC" => (&mut self.b, &mut self.c),
+            "DE" => (&mut self.d, &mut self.e),
+            "HL" => (&mut self.h, &mut self.l),
+            _ => panic!("Unknown reg pair {}", reg_pair),
         };
 
         *high = (val >> 8) as u8;
@@ -93,73 +71,27 @@ impl Registers {
 
     pub fn get_reg(&self, reg: &str) -> u8 {
         match reg {
-            "B" => {
-                self.b
-            },
-            
-            "C" => {
-                self.c
-            },
-
-            "D" => {
-                self.d
-            },
-
-            "E" => {
-                self.e
-            },
-
-            "H" => {
-                self.h
-            },
-
-            "L" => {
-                self.l
-            },
-
-            "A" => {
-                self.a
-            },
-
-            _ => {
-                panic!("Unknown reg {}", reg);
-            },
+            "B" => self.b,
+            "C" => self.c,
+            "D" => self.d,
+            "E" => self.e,
+            "H" => self.h,
+            "L" => self.l,
+            "A" => self.a,
+            _ => panic!("Unknown reg {}", reg),
         }
     }
 
     pub fn set_reg(&mut self, reg_name: &str, val: u8) {
         let reg = match reg_name {
-            "B" => {
-                &mut self.b
-            },
-            
-            "C" => {
-                &mut self.c
-            },
-
-            "D" => {
-                &mut self.d
-            },
-
-            "E" => {
-                &mut self.e
-            },
-
-            "H" => {
-                &mut self.h
-            },
-
-            "L" => {
-                &mut self.l
-            },
-
-            "A" => {
-                &mut self.a
-            },
-
-            _ => {
-                panic!("Unknown reg {}", reg_name);
-            },
+            "B" => &mut self.b,
+            "C" => &mut self.c,
+            "D" => &mut self.d,
+            "E" => &mut self.e,
+            "H" => &mut self.h,
+            "L" => &mut self.l,
+            "A" => &mut self.a,
+            _ => panic!("Unknown reg {}", reg_name),
         };
 
         *reg = val;
