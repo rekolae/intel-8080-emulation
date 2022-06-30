@@ -264,7 +264,7 @@ impl Intel8080 {
 
     // LXI reg pair - Load to reg pair the immediate value from addr
     fn lxi(&mut self, reg_pair: &str) {
-        let val: u16 = (self.mem[self.registers.pc + 1] as u16) << 8 | self.mem[self.registers.pc + 2] as u16;
+        let val: u16 = (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16;
         self.registers.set_reg_pair(reg_pair, val);
         
         self.advance_pc(3);
@@ -280,7 +280,7 @@ impl Intel8080 {
 
     // INX reg pair - Increment reg pair value
     fn inx(&mut self, reg_pair: &str) {
-        self.registers.set_reg_pair(reg_pair, self.registers.get_reg_pair(reg_pair) + 1);
+        self.registers.set_reg_pair(reg_pair, self.registers.get_reg_pair(reg_pair).wrapping_add(1));
         self.advance_pc(1);
     }
 
@@ -288,8 +288,9 @@ impl Intel8080 {
     fn inr(&mut self, reg_name: &str) {
         
         let val: u8 = self.registers.get_reg(reg_name);
-        self.registers.set_reg(reg_name, val + 1);
-        self.registers.f.set_artihmetic_flags(val + 1);
+        let incremented_val: u8 = val.wrapping_add(1);
+        self.registers.set_reg(reg_name, incremented_val);
+        self.registers.f.set_artihmetic_flags(incremented_val);
 
         /*
         Check that the lower four bits are all 0 by ANDing 0xF to the pre-incremented value and adding one e.g.
@@ -306,7 +307,7 @@ impl Intel8080 {
 
     // DCR reg - Decrement reg value
     fn dcr(&mut self, reg_name: &str) {
-        let val: u8 = self.registers.get_reg(reg_name) - 1;
+        let val: u8 = self.registers.get_reg(reg_name).wrapping_sub(1);
         self.registers.set_reg(reg_name, val);
         self.registers.f.set_artihmetic_flags(val);
 
@@ -577,13 +578,10 @@ impl Intel8080 {
                 // If lower 4 bits is greater than 9 or aux carry is set -> 6 is added to the lower 4 bits of the reg A
                 if lower > 9 || self.registers.f.aux_carry {
 
-                    // If the lower 4 bits overflow because of the addition, set aux carry flag
+                    // If the lower 4 bits overflow because of the addition, set aux carry flag, otherwise clear it
                     if lower + 6 > 0xF {
                         self.registers.f.aux_carry = true;
-                    }
-
-                    // Otherwise clear it
-                    else {
+                    } else {
                         self.registers.f.aux_carry = false;
                     }
 
@@ -608,6 +606,8 @@ impl Intel8080 {
 
                 // Set sign, zero and parity flags
                 self.registers.f.set_artihmetic_flags(self.registers.get_reg("A"));
+
+                self.advance_pc(1);
             },
             0x28 => {
                 // NOP* - No operation (alternate)
@@ -647,6 +647,8 @@ impl Intel8080 {
 
                 // This one is simple, just invert all of the bits
                 self.registers.set_reg("A", !self.registers.get_reg("A"));
+
+                self.advance_pc(1);
             },
     
             /*
