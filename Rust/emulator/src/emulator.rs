@@ -231,14 +231,14 @@ impl Intel8080 {
         self.registers.f.set_artihmetic_flags(incremented_val);
 
         /*
-        Check that the lower four bits are all 0 by ANDing 0xF to the pre-incremented value and adding one e.g.
+        Check if incremented value is greater than 0xF by ANDing 0xF to the pre-incremented value and adding one e.g.
             01101111    Some value before it was incremented by one
             00001111    0xF
             00001111    AND operation
             00010000    increment
             Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
         */
-        self.registers.f.aux_carry = (val & 0xf) + 0x01 > 0x0f;
+        self.registers.f.aux_carry = (val & 0xF) + 0x01 > 0x0F;
         
         self.advance_pc(1);
     }
@@ -309,6 +309,66 @@ impl Intel8080 {
     fn mov_r(&mut self, src: &str) {
         let addr: usize = self.registers.get_reg_pair("HL").into();
         self.mem[addr] = self.registers.get_reg(src);
+        self.advance_pc(1);
+    }
+
+    // ADD val - Add val to accumulator
+    fn add(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let added_val: u8 = reg_a.wrapping_add(val);
+
+        self.registers.set_reg("A", added_val);
+        self.registers.f.set_artihmetic_flags(added_val);
+
+        /*
+        Check if added value is greater than 0xF by ANDing 0xF to the pre-added value and the value to be added and
+        adding them together e.g.
+            01101111    Reg A before a value was added to it
+            00001111    0xF
+            00001111    AND operation
+
+            00010110    Some value to be added (26 in this case for example)
+            00001111    0xF
+            00000110    AND operation
+
+            00001111    Reg A AND 0xF
+            00000110    Some val AND 0xF
+            00010101    addition of the two values above
+            Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
+        */
+        self.registers.f.aux_carry = (reg_a & 0xF) + (val & 0xF) > 0x0F;
+
+        self.advance_pc(1);
+    }
+
+    // ADC val - Add val to accumulator with carry
+    fn adc(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let carry: u8 = self.registers.f.carry as u8;
+        let added_val: u8 = reg_a.wrapping_add(val).wrapping_add(carry);
+
+        self.registers.set_reg("A", added_val);
+        self.registers.f.set_artihmetic_flags(added_val);
+
+        /*
+        Check if added value is greater than 0xF by ANDing 0xF to the pre-added value and the value to be added and
+        adding them together + the carry e.g.
+            01101111    Reg A before a value was added to it
+            00001111    0xF
+            00001111    AND operation
+
+            00010110    Some value to be added (26 in this case for example)
+            00001111    0xF
+            00000110    AND operation
+
+            00001111    Reg A AND 0xF
+            00000110    Some val AND 0xF
+            00000001    Carry
+            00010110    addition of the two values above and addition the value of carry
+            Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
+        */
+        self.registers.f.aux_carry = (reg_a & 0xF) + (val & 0xF) + carry > 0x0F;
+
         self.advance_pc(1);
     }
 
@@ -993,25 +1053,75 @@ impl Intel8080 {
                 self.nop();
             },
     
-            /*
             // 0x8x
-            0x80 => {println!("ADD B");},
-            0x81 => {println!("ADD C");},
-            0x82 => {println!("ADD D");},
-            0x83 => {println!("ADD E");},
-            0x84 => {println!("ADD H");},
-            0x85 => {println!("ADD L");},
-            0x86 => {println!("ADD M");},
-            0x87 => {println!("ADD A");},
-            0x88 => {println!("ADC B");},
-            0x89 => {println!("ADC C");},
-            0x8a => {println!("ADC D");},
-            0x8b => {println!("ADC E");},
-            0x8c => {println!("ADC H");},
-            0x8d => {println!("ADC L");},
-            0x8e => {println!("ADC M");},
-            0x8f => {println!("ADC A");},
+            0x80 => {
+                // ADD B - Add reg B to reg A
+                self.add(self.registers.get_reg("B"));
+            },
+            0x81 => {
+                // ADD C - Add reg C to reg A
+                self.add(self.registers.get_reg("C"));
+            },
+            0x82 => {
+                // ADD D - Add reg D to reg A
+                self.add(self.registers.get_reg("D"));
+            },
+            0x83 => {
+                // ADD E - Add reg E to reg A
+                self.add(self.registers.get_reg("E"));
+            },
+            0x84 => {
+                // ADD H - Add reg H to reg A
+                self.add(self.registers.get_reg("H"));
+            },
+            0x85 => {
+                // ADD L - Add reg L to reg A
+                self.add(self.registers.get_reg("L"));
+            },
+            0x86 => {
+                // ADD M - Add byte from mem pointed to by reg pair HL to reg A
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.add(self.mem[addr]);
+            },
+            0x87 => {
+                // ADD A - Add reg A to reg A
+                self.add(self.registers.get_reg("A"));
+            },
+            0x88 => {
+                // ADC B - Add reg B to reg A with carry
+                self.adc(self.registers.get_reg("B"));
+            },
+            0x89 => {
+                // ADC C - Add reg C to reg A with carry
+                self.adc(self.registers.get_reg("C"));
+            },
+            0x8a => {
+                // ADC D - Add reg D to reg A with carry
+                self.adc(self.registers.get_reg("D"));
+            },
+            0x8b => {
+                // ADC E - Add reg E to reg A with carry
+                self.adc(self.registers.get_reg("E"));
+            },
+            0x8c => {
+                // ADC H - Add reg H to reg A with carry
+                self.adc(self.registers.get_reg("H"));
+            },
+            0x8d => {
+                // ADC L - Add reg L to reg A with carry
+                self.adc(self.registers.get_reg("L"));
+            },
+            0x8e => {
+                // ADC M - Add byte from mem pointed to by reg pair HL to reg A with carry
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.adc(self.mem[addr]);
+            },
+            0x8f => {
+                // ADC A - Add reg A to reg A with carry
+                self.adc(self.registers.get_reg("A"));
+            },
     
+            /*
             // 0x9x
             0x90 => {println!("SUB B");},
             0x91 => {println!("SUB C");},
@@ -1149,15 +1259,31 @@ impl Intel8080 {
     }
 
     pub fn test(&mut self) {
-        self.registers.set_reg("A", 0b11001100);
+        self.registers.set_reg("A", 0x42);
+        self.registers.set_reg("D", 0x3D);
         //self.registers.set_reg_pair("HL", 0xF00F);
-        //self.registers.f.carry = true;
-        //println!("FLAGS: {:#?}\n", self.registers.f);
+        self.registers.f.carry = true;
+        println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
 
-        self.registers.set_reg("A", !self.registers.get_reg("A"));
+        let val: u8  = self.registers.get_reg("D");
+        let reg_a: u8 = self.registers.get_reg("A");
+        let added_val: u8 = reg_a.wrapping_add(val).wrapping_add(self.registers.f.carry as u8);
 
-        //println!("\nFLAGS: {:#?}\n", self.registers.f);
+        self.registers.set_reg("A", added_val);
+        self.registers.f.set_artihmetic_flags(added_val);
+
+        /*
+        Check that the lower four bits are all 0 by ANDing 0xF to the pre-incremented value and adding one e.g.
+            01101111    Some value before it was incremented by one
+            00001111    0xF
+            00001111    AND operation
+            00010000    increment
+            Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
+        */
+        self.registers.f.aux_carry = (reg_a & 0xF) + (val & 0xF) + self.registers.f.carry as u8 > 0x0F;
+
+        println!("\nFLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
     }
 }
