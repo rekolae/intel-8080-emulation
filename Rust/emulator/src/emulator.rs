@@ -319,6 +319,7 @@ impl Intel8080 {
 
         self.registers.set_reg("A", added_val);
         self.registers.f.set_artihmetic_flags(added_val);
+        self.registers.f.carry = reg_a as u16 + val as u16 > 0xff;
 
         /*
         Check if added value is greater than 0xF by ANDing 0xF to the pre-added value and the value to be added and
@@ -349,6 +350,7 @@ impl Intel8080 {
 
         self.registers.set_reg("A", added_val);
         self.registers.f.set_artihmetic_flags(added_val);
+        self.registers.f.carry = reg_a as u16 + val as u16 + carry as u16 > 0xff;
 
         /*
         Check if added value is greater than 0xF by ANDing 0xF to the pre-added value and the value to be added and
