@@ -469,6 +469,34 @@ impl Intel8080 {
         self.registers.set_reg("A", result);
     }
 
+    // ORA val - Logical OR value with accumulator
+    fn ora(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let result: u8 = reg_a | val;
+
+        // Carry and aux carry are always set to zero
+        self.registers.f.carry = false;
+        self.registers.f.aux_carry = false;
+        self.registers.f.set_artihmetic_flags(result);
+        self.registers.set_reg("A", result);
+    }
+
+    // CMP val - Compare value with accumulator
+    fn cmp(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+
+        /*
+        From the "8080/8085 Assembly Language Programming Manual":
+            Comparisons are performed by subtracting the specified byte from the contents of the accumulator, which is
+            why the zero and carry flags indicate the result.
+
+        So we can use the the SUB instruction, but set the reg A value back to it's original value
+        */
+        self.sub(val);
+
+        self.registers.set_reg("A", reg_a);
+    }
+
     // Execute the matching opcode and set the registers to their corresponding state
     fn exec_opcode(&mut self) {
         match self.mem[self.registers.pc] {
@@ -1354,25 +1382,75 @@ impl Intel8080 {
                 self.xra(self.registers.get_reg("A"));
             },
     
-            /*
             // 0xbx
-            0xb0 => {println!("ORA B");},
-            0xb1 => {println!("ORA C");},
-            0xb2 => {println!("ORA D");},
-            0xb3 => {println!("ORA E");},
-            0xb4 => {println!("ORA H");},
-            0xb5 => {println!("ORA L");},
-            0xb6 => {println!("ORA M");},
-            0xb7 => {println!("ORA A");},
-            0xb8 => {println!("CMP B");},
-            0xb9 => {println!("CMP C");},
-            0xba => {println!("CMP D");},
-            0xbb => {println!("CMP E");},
-            0xbc => {println!("CMP H");},
-            0xbd => {println!("CMP L");},
-            0xbe => {println!("CMP M");},
-            0xbf => {println!("CMP A");},
+            0xb0 => {
+                // ORA B - Logical OR reg  with reg A
+                self.ora(self.registers.get_reg("B"))
+            },
+            0xb1 => {
+                // ORA C - Logical OR reg C with reg A
+                self.ora(self.registers.get_reg("C"))
+            },
+            0xb2 => {
+                // ORA D - Logical OR reg D with reg A
+                self.ora(self.registers.get_reg("D"))
+            },
+            0xb3 => {
+                // ORA E - Logical OR reg E with reg A
+                self.ora(self.registers.get_reg("E"))
+            },
+            0xb4 => {
+                // ORA H - Logical OR reg H with reg A
+                self.ora(self.registers.get_reg("H"))
+            },
+            0xb5 => {
+                // ORA L - Logical OR reg L with reg A
+                self.ora(self.registers.get_reg("L"))
+            },
+            0xb6 => {
+                // ORA M - Logical OR byte from mem pointed to by reg pair HL with reg A
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.ora(self.mem[addr]);
+            },
+            0xb7 => {
+                // ORA A - Logical OR reg A with reg A
+                self.ora(self.registers.get_reg("A"))
+            },
+            0xb8 => {
+                // CMP B - Compare reg B with reg A
+                self.cmp(self.registers.get_reg("B"))
+            },
+            0xb9 => {
+                // CMP C - Compare reg C with reg A
+                self.cmp(self.registers.get_reg("C"))
+            },
+            0xba => {
+                // CMP D - Compare reg D with reg A
+                self.cmp(self.registers.get_reg("D"))
+            },
+            0xbb => {
+                // CMP E - Compare reg E with reg A
+                self.cmp(self.registers.get_reg("E"))
+            },
+            0xbc => {
+                // CMP H - Compare reg H with reg A
+                self.cmp(self.registers.get_reg("H"))
+            },
+            0xbd => {
+                // CMP L - Compare reg L with reg A
+                self.cmp(self.registers.get_reg("L"))
+            },
+            0xbe => {
+                // CMP M - Compare byte from mem pointed to by reg pair HL with reg A
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.cmp(self.mem[addr]);
+            },
+            0xbf => {
+                // CMP A - Compare reg A with reg A
+                self.cmp(self.registers.get_reg("A"))
+            },
     
+            /*
             // 0xcx
             0xc0 => {println!("RNZ");},
             0xc1 => {println!("POP B");},
