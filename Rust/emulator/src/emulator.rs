@@ -436,6 +436,39 @@ impl Intel8080 {
         self.advance_pc(1);
     }
 
+    // ANA val - Logical AND value with accumulator
+    fn ana(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let result: u8 = reg_a & val;
+
+        // Carry is always set to zero
+        self.registers.f.carry = false;
+        self.registers.f.set_artihmetic_flags(result);
+        self.registers.set_reg("A", result);
+
+        /*
+        From the "8080/8085 Assembly Language Programming Manual":
+
+            There is some difference in the handling of the auxiliary carry flag by the logical AND instructions in the
+            8080 processor and the 8085 processor. The 8085 logical AND instructions always set the auxiliary flag ON.
+            The 8080 logical AND instructions set the flag to reflect the logical OR of bit 3 of the values involved in
+            the AND operation.
+        */
+        self.registers.f.aux_carry = ((reg_a | val) & 0x08) == 1;
+    }
+
+    // XRA val - Logical XOR value with accumulator
+    fn xra(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let result: u8 = reg_a ^ val;
+
+        // Carry and aux carry are always set to zero
+        self.registers.f.carry = false;
+        self.registers.f.aux_carry = false;
+        self.registers.f.set_artihmetic_flags(result);
+        self.registers.set_reg("A", result);
+    }
+
     // Execute the matching opcode and set the registers to their corresponding state
     fn exec_opcode(&mut self) {
         match self.mem[self.registers.pc] {
@@ -1253,25 +1286,75 @@ impl Intel8080 {
                 self.sbb(self.registers.get_reg("A"));
             },
     
-            /*
             // 0xax
-            0xa0 => {println!("ANA B");},
-            0xa1 => {println!("ANA C");},
-            0xa2 => {println!("ANA D");},
-            0xa3 => {println!("ANA E");},
-            0xa4 => {println!("ANA H");},
-            0xa5 => {println!("ANA L");},
-            0xa6 => {println!("ANA M");},
-            0xa7 => {println!("ANA A");},
-            0xa8 => {println!("XRA B");},
-            0xa9 => {println!("XRA C");},
-            0xaa => {println!("XRA D");},
-            0xab => {println!("XRA E");},
-            0xac => {println!("XRA H");},
-            0xad => {println!("XRA L");},
-            0xae => {println!("XRA M");},
-            0xaf => {println!("XRA A");},
+            0xa0 => {
+                // ANA B - Logical AND reg B with reg A
+                self.ana(self.registers.get_reg("B"));
+            },
+            0xa1 => {
+                // ANA C - Logical AND reg C with reg A
+                self.ana(self.registers.get_reg("C"));
+            },
+            0xa2 => {
+                // ANA D - Logical AND reg D with reg A
+                self.ana(self.registers.get_reg("D"));
+            },
+            0xa3 => {
+                // ANA E - Logical AND reg E with reg A
+                self.ana(self.registers.get_reg("E"));
+            },
+            0xa4 => {
+                // ANA H - Logical AND reg H with reg A
+                self.ana(self.registers.get_reg("F"));
+            },
+            0xa5 => {
+                // ANA L - Logical AND reg L with reg A
+                self.ana(self.registers.get_reg("L"));
+            },
+            0xa6 => {
+                // ANA M - Logical AND byte from mem pointed to by reg pair HL with reg A
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.ana(self.mem[addr]);
+            },
+            0xa7 => {
+                // ANA A - Logical AND reg A with reg A
+                self.ana(self.registers.get_reg("A"));
+            },
+            0xa8 => {
+                // XRA B - Logical XOR reg B with reg A
+                self.xra(self.registers.get_reg("B"));
+            },
+            0xa9 => {
+                // XRA C - Logical XOR reg C with reg A
+                self.xra(self.registers.get_reg("C"));
+            },
+            0xaa => {
+                // XRA D - Logical XOR reg D with reg A
+                self.xra(self.registers.get_reg("D"));
+            },
+            0xab => {
+                // XRA E - Logical XOR reg E with reg A
+                self.xra(self.registers.get_reg("E"));
+            },
+            0xac => {
+                // XRA H - Logical XOR reg H with reg A
+                self.xra(self.registers.get_reg("H"));
+            },
+            0xad => {
+                // XRA L - Logical XOR reg L with reg A
+                self.xra(self.registers.get_reg("L"));
+            },
+            0xae => {
+                // XRA M - Logical XOR byte from mem pointed to by reg pair HL with reg A
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.xra(self.mem[addr]);
+            },
+            0xaf => {
+                // XRA A - Logical XOR reg A with reg A
+                self.xra(self.registers.get_reg("A"));
+            },
     
+            /*
             // 0xbx
             0xb0 => {println!("ORA B");},
             0xb1 => {println!("ORA C");},
