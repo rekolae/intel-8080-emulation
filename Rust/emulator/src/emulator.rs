@@ -372,6 +372,68 @@ impl Intel8080 {
         self.advance_pc(1);
     }
 
+    // SUB val - Subtract val from accumulator
+    fn sub(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let subtracted_val: u8 = reg_a.wrapping_sub(val);
+
+        self.registers.set_reg("A", subtracted_val);
+        self.registers.f.set_artihmetic_flags(subtracted_val);
+        self.registers.f.carry = reg_a < val;
+
+        /*
+        Check if subtracting the given value and reg A that have been casted as integers and ANDed with 0x0F results in
+        a positive value or not e.g.
+            01101101    Reg A (casted as an integer) before a value was subtracted from it
+            00001111    0x0F
+            00001101    AND operation
+
+            00011110    Some value (casted as an integer) to be subtracted
+            00001111    0x0F
+            00001110    AND operation
+
+            00001101    Reg A AND 0x0F
+            00001110    Some val AND 0x0F
+            10000001    subtract lower from upper value
+            Less than 0x0 -> False, borrow happened from lower 4 bits to the upper ones
+        */
+        self.registers.f.aux_carry = (reg_a as i8 & 0x0F) - (val as i8 & 0x0F) >= 0x0;
+
+        self.advance_pc(1);
+    }
+
+    // SBB val - Subtract val from accumulator with borrow
+    fn sbb(&mut self, val: u8) {
+        let reg_a: u8 = self.registers.get_reg("A");
+        let carry: u8 = self.registers.f.carry as u8;
+        let subtracted_val: u8 = reg_a.wrapping_sub(val).wrapping_sub(carry);
+
+        self.registers.set_reg("A", subtracted_val);
+        self.registers.f.set_artihmetic_flags(subtracted_val);
+        self.registers.f.carry = reg_a < val + carry;
+
+        /*
+        Check if subtracting the given value and reg A that have been casted as integers and ANDed with 0x0F + the
+        possible carry/borrow results in a positive value or not e.g.
+            01101101    Reg A (casted as an integer) before a value was subtracted from it
+            00001111    0x0F
+            00001101    AND operation
+
+            00011110    Some value (casted as an integer) to be subtracted
+            00001111    0x0F
+            00001110    AND operation
+
+            00001101    Reg A AND 0x0F
+            00001110    Some val AND 0x0F
+            00000001    Carry/Borrow
+            10000010    subtract lower from upper value and the carry/borrow
+            Less than 0x0 -> False, borrow happened from lower 4 bits to the upper ones
+        */
+        self.registers.f.aux_carry = (reg_a as i8 & 0x0F) - (val as i8 & 0x0F) - (carry as i8) >= 0x0;
+
+        self.advance_pc(1);
+    }
+
     // Execute the matching opcode and set the registers to their corresponding state
     fn exec_opcode(&mut self) {
         match self.mem[self.registers.pc] {
@@ -1121,25 +1183,75 @@ impl Intel8080 {
                 self.adc(self.registers.get_reg("A"));
             },
     
-            /*
             // 0x9x
-            0x90 => {println!("SUB B");},
-            0x91 => {println!("SUB C");},
-            0x92 => {println!("SUB D");},
-            0x93 => {println!("SUB E");},
-            0x94 => {println!("SUB H");},
-            0x95 => {println!("SUB L");},
-            0x96 => {println!("SUB M");},
-            0x97 => {println!("SUB A");},
-            0x98 => {println!("SBB B");},
-            0x99 => {println!("SBB C");},
-            0x9a => {println!("SBB D");},
-            0x9b => {println!("SBB E");},
-            0x9c => {println!("SBB H");},
-            0x9d => {println!("SBB L");},
-            0x9e => {println!("SBB M");},
-            0x9f => {println!("SBB A");},
+            0x90 => {
+                // SUB B - Subtract reg B from from reg A
+                self.sub(self.registers.get_reg("B"));
+            },
+            0x91 => {
+                // SUB C - Subtract reg C from from reg A
+                self.sub(self.registers.get_reg("C"));
+            },
+            0x92 => {
+                // SUB D - Subtract reg D from from reg A
+                self.sub(self.registers.get_reg("D"));
+            },
+            0x93 => {
+                // SUB E - Subtract reg E from from reg A
+                self.sub(self.registers.get_reg("E"));
+            },
+            0x94 => {
+                // SUB H - Subtract reg H from from reg A
+                self.sub(self.registers.get_reg("H"));
+            },
+            0x95 => {
+                // SUB L - Subtract reg L from from reg A
+                self.sub(self.registers.get_reg("L"));
+            },
+            0x96 => {
+                // SUB M - Subtract byte from mem pointed to by reg pair HL from reg A
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.sub(self.mem[addr]);
+            },
+            0x97 => {
+                // SUB A - Subtract reg A from reg A
+                self.sub(self.registers.get_reg("A"));
+            },
+            0x98 => {
+                // SBB B - Subtract reg B from reg A with borrow
+                self.sbb(self.registers.get_reg("B"));
+            },
+            0x99 => {
+                // SBB C - Subtract reg C from reg A with borrow
+                self.sbb(self.registers.get_reg("C"));
+            },
+            0x9a => {
+                // SBB D - Subtract reg D from reg A with borrow
+                self.sbb(self.registers.get_reg("D"));
+            },
+            0x9b => {
+                // SBB E - Subtract reg E from reg A with borrow
+                self.sbb(self.registers.get_reg("E"));
+            },
+            0x9c => {
+                // SBB H - Subtract reg H from reg A with borrow
+                self.sbb(self.registers.get_reg("H"));
+            },
+            0x9d => {
+                // SBB L - Subtract reg L from reg A with borrow
+                self.sbb(self.registers.get_reg("L"));
+            },
+            0x9e => {
+                // SBB M - Subtract byte from mem pointed to by reg pair HL from reg A with borrow 
+                let addr: usize = self.registers.get_reg_pair("HL").into();
+                self.sbb(self.mem[addr]);
+            },
+            0x9f => {
+                // SBB A - Subtract reg A from reg A with borrow
+                self.sbb(self.registers.get_reg("A"));
+            },
     
+            /*
             // 0xax
             0xa0 => {println!("ANA B");},
             0xa1 => {println!("ANA C");},
@@ -1259,29 +1371,14 @@ impl Intel8080 {
     }
 
     pub fn test(&mut self) {
-        self.registers.set_reg("A", 0x42);
-        self.registers.set_reg("D", 0x3D);
+        self.registers.set_reg("A", 0x4);
+        //self.registers.set_reg("D", 0x2);
         //self.registers.set_reg_pair("HL", 0xF00F);
-        self.registers.f.carry = true;
+        //self.registers.f.carry = true;
         println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
 
-        let val: u8  = self.registers.get_reg("D");
-        let reg_a: u8 = self.registers.get_reg("A");
-        let added_val: u8 = reg_a.wrapping_add(val).wrapping_add(self.registers.f.carry as u8);
-
-        self.registers.set_reg("A", added_val);
-        self.registers.f.set_artihmetic_flags(added_val);
-
-        /*
-        Check that the lower four bits are all 0 by ANDing 0xF to the pre-incremented value and adding one e.g.
-            01101111    Some value before it was incremented by one
-            00001111    0xF
-            00001111    AND operation
-            00010000    increment
-            Greater than 0xF -> True, carry happened from lower 4 bits to the upper ones
-        */
-        self.registers.f.aux_carry = (reg_a & 0xF) + (val & 0xF) + self.registers.f.carry as u8 > 0x0F;
+        // Test code goes here
 
         println!("\nFLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
