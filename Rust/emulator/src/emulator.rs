@@ -1591,25 +1591,85 @@ impl Intel8080 {
                 self.rst(1);
             },
     
-            /*
             // 0xdx
-            0xd0 => {println!("RNC");},
-            0xd1 => {println!("POP D");},
-            0xd2 => {println!("{:<width$} {:#04x}{:02x}", "JNC", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xd3 => {println!("{:<width$} #{:#04x}", "OUT", bytes[pc+1]); opcode_offset=2;},
-            0xd4 => {println!("{:<width$} {:#04x}{:02x}", "CNC", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xd5 => {println!("PUSH D");},
-            0xd6 => {println!("{:<width$} #{:#04x}", "SUI", bytes[pc+1]); opcode_offset=2;},
-            0xd7 => {println!("RST 2");},
-            0xd8 => {println!("RC");},
-            0xd9 => {println!("RET*");},
-            0xda => {println!("{:<width$} {:#04x}{:02x}", "JC", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xdb => {println!("{:<width$} #{:#04x}", "IN", bytes[pc+1]); opcode_offset=2;},
-            0xdc => {println!("{:<width$} {:#04x}{:02x}", "CC", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xdd => {println!("{:<width$} {:#04x}{:02x}", "CALL*", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xde => {println!("{:<width$} #{:#04x}", "SBI", bytes[pc+1]); opcode_offset=2;},
-            0xdf => {println!("RST 3");},
+            0xd0 => {
+                // RNC - Return if carry flag not set
+                self.ret(!self.registers.f.carry);
+            },
+            0xd1 => {
+                // POP D - Pop addr from stack and copy byte from memory to reg pair DE
+                self.pop("DE");
+            },
+            0xd2 => {
+                // JNC - Jump if carry flag not set
+                self.jmp(!self.registers.f.carry);
+            },
+            0xd3 => {
+                // OUT - Output accumulator to port specified in the next byte
+
+                /*
+                    ## Will be implemented later, when all other instructions are emulated ##
+                */
+
+                self.advance_pc(2);
+            },
+            0xd4 => {
+                // CNC - Call if carry flag not set
+                self.call(!self.registers.f.carry);
+            },
+            0xd5 => {
+                // PUSH D - Push reg pair DE to memory pointed to by SP
+                self.push("DE");
+            },
+            0xd6 => {
+                // SUI - Subtract immediate value from accumulator
+                self.sub(self.mem[self.registers.pc + 1]);
+                self.advance_pc(2);
+            },
+            0xd7 => {
+                // RST 2 - Restart from addr
+                self.rst(2);
+            },
+            0xd8 => {
+                // RC - Return if carry flag is set
+                self.ret(self.registers.f.carry);
+            },
+            0xd9 => {
+                // RET* - Return uncoditionally (alternate)
+                self.ret(true);
+            },
+            0xda => {
+                // JC - Jump if carry flag is set
+                self.jmp(self.registers.f.carry);
+            },
+            0xdb => {
+                // IN - Write byte to accumulator from port specified in the next byte
+
+                /*
+                    ## Will be implemented later, when all other instructions are emulated ##
+                */
+
+                self.advance_pc(2);
+            },
+            0xdc => {
+                // CC - Call if carry flag is set
+                self.call(self.registers.f.carry);
+            },
+            0xdd => {
+                // CALL* - Call uncoditionally (alternate)
+                self.call(true);
+            },
+            0xde => {
+                // SBI - Subtract immediate value from accumulator with carry
+                self.sbb(self.mem[self.registers.pc + 1]);
+                self.advance_pc(2);
+            },
+            0xdf => {
+                // RST 3 - Restart from addr
+                self.rst(3);
+            },
     
+            /*
             // 0xex
             0xe0 => {println!("RPO");},
             0xe1 => {println!("POP H");},
