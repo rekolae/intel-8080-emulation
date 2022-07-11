@@ -473,6 +473,8 @@ impl Intel8080 {
             the AND operation.
         */
         self.registers.f.aux_carry = ((reg_a | val) & 0x08) == 1;
+
+        self.advance_pc(1);
     }
 
     // XRA val - Logical XOR value with accumulator
@@ -485,6 +487,8 @@ impl Intel8080 {
         self.registers.f.aux_carry = false;
         self.registers.f.set_artihmetic_flags(result);
         self.registers.set_reg("A", result);
+
+        self.advance_pc(1);
     }
 
     // ORA val - Logical OR value with accumulator
@@ -497,6 +501,8 @@ impl Intel8080 {
         self.registers.f.aux_carry = false;
         self.registers.f.set_artihmetic_flags(result);
         self.registers.set_reg("A", result);
+
+        self.advance_pc(1);
     }
 
     // CMP val - Compare value with accumulator
@@ -513,6 +519,8 @@ impl Intel8080 {
         self.sub(val);
 
         self.registers.set_reg("A", reg_a);
+
+        self.advance_pc(1);
     }
 
     // RET IF condition - Return from subroutine by popping stack if condition is true
