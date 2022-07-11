@@ -189,10 +189,28 @@ impl Intel8080 {
         self.registers.pc += val;
     }
 
-    // Return the next 2 bytes in memory
-    fn get_word(&self) -> u16 {
+    // Return 2 bytes from memory pointed to by either PC or SP
+    fn get_word(&self, pc: bool) -> u16 {
         // Take into account that the 8080 is little endian, so the first byte is actually the lower part of the value
-        (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16
+        if pc {
+            (self.mem[self.registers.pc + 2] as u16) << 8 | self.mem[self.registers.pc + 1] as u16
+        } else {
+            (self.mem[self.registers.sp as usize + 1] as u16) << 8 | self.mem[self.registers.sp as usize] as u16
+        }
+    }
+
+    // Return 2 bytes from memory pointed to by SP
+    fn pop_stack(&mut self) -> u16 {
+        let val: u16 = self.get_word(false);
+        self.registers.sp = self.registers.sp.wrapping_add(2);
+        val
+    }
+
+    // Store 2 bytes into memory pointed to by SP
+    fn push_stack(&mut self, val: u16) {
+        self.registers.sp = self.registers.sp.wrapping_sub(2);
+        self.mem[(self.registers.sp + 1) as usize] = (val >> 8) as u8;
+        self.mem[self.registers.sp as usize] = val as u8;
     }
 
     // No operation
@@ -202,7 +220,7 @@ impl Intel8080 {
 
     // LXI reg pair - Load to reg pair the immediate value from addr
     fn lxi(&mut self, reg_pair: &str) {
-        let val: u16 = self.get_word();
+        let val: u16 = self.get_word(true);
         self.registers.set_reg_pair(reg_pair, val);
         
         self.advance_pc(3);
@@ -497,6 +515,53 @@ impl Intel8080 {
         self.registers.set_reg("A", reg_a);
     }
 
+    // RET IF condition - Return from subroutine by popping stack if condition is true
+    fn ret(&mut self, condition: bool) {
+        if condition {
+            self.registers.pc = self.pop_stack() as usize;
+        } else {
+            self.advance_pc(1);
+        }
+    }
+
+    // POP reg pair - Pop addr from stack and copy word from memory to reg pair
+    fn pop(&mut self, reg_pair: &str) {
+        let val: u16 = self.pop_stack();
+        self.registers.set_reg_pair(reg_pair, val);
+        self.advance_pc(1);
+    }
+
+    // PUSH reg pair - Push reg pair to memory pointed to by SP
+    fn push(&mut self, reg_pair: &str) {
+        self.push_stack(self.registers.get_reg_pair(reg_pair));
+        self.advance_pc(1);
+    }
+
+    // JMP IF condition - Jump to address specified in the next two bytes
+    fn jmp(&mut self, condition: bool) {
+        if condition {
+            self.registers.pc = self.get_word(true) as usize;
+        } else {
+            self.advance_pc(3);
+        }
+    }
+
+    // CALL IF condition - Jump to address specified in the next two bytes
+    fn call(&mut self, condition: bool) {
+        if condition {
+            self.push_stack(self.registers.pc as u16);
+            self.registers.pc = self.get_word(true).into();
+        } else {
+            self.advance_pc(3);
+        }
+    }
+
+    // RST num - Restart from a predefined address based on restart num
+    fn rst(&mut self, val: u8) {
+        self.push_stack(self.registers.pc as u16);
+        self.registers.pc = self.mem[(0x08 * val) as usize].into();
+    }
+
     // Execute the matching opcode and set the registers to their corresponding state
     fn exec_opcode(&mut self) {
         match self.mem[self.registers.pc] {
@@ -689,7 +754,7 @@ impl Intel8080 {
                 let h: u8 = self.registers.get_reg("H");
                 let l: u8 = self.registers.get_reg("L");
 
-                let addr: u16 = self.get_word();
+                let addr: u16 = self.get_word(true);
 
                 self.mem[addr as usize] = l;
                 self.mem[(addr + 1) as usize] = h;
@@ -762,7 +827,7 @@ impl Intel8080 {
             },
             0x2a => {
                 // LHLD - Load reg H and reg L from mem addr given in pc+1 and pc+2
-                let addr: u16 = self.get_word();
+                let addr: u16 = self.get_word(true);
 
                 self.registers.set_reg("L", self.mem[addr as usize]);
                 self.registers.set_reg("H", self.mem[(addr + 1) as usize]);
@@ -801,14 +866,14 @@ impl Intel8080 {
             },
             0x31 => {
                 // LXI SP - Load reg Stack Pointer immediate
-                let val: u16 = self.get_word();
+                let val: u16 = self.get_word(true);
                 self.registers.sp = val;
 
                 self.advance_pc(3);
             },
             0x32 => {
                 // STA - Store accumulator direct
-                let addr: u16 = self.get_word();
+                let addr: u16 = self.get_word(true);
                 self.mem[addr as usize] = self.registers.get_reg("A");
 
                 self.advance_pc(3);
@@ -885,7 +950,7 @@ impl Intel8080 {
             },
             0x3a => {
                 // LDA - Load byte from mem to accumulator
-                let addr: u16 = self.get_word();
+                let addr: u16 = self.get_word(true);
                 self.registers.set_reg("A", self.mem[addr as usize]);
 
                 self.advance_pc(3);
@@ -1450,25 +1515,75 @@ impl Intel8080 {
                 self.cmp(self.registers.get_reg("A"))
             },
     
-            /*
             // 0xcx
-            0xc0 => {println!("RNZ");},
-            0xc1 => {println!("POP B");},
-            0xc2 => {println!("{:<width$} {:#04x}{:02x}", "JNZ", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xc3 => {println!("{:<width$} {:#04x}{:02x}", "JMP", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xc4 => {println!("{:<width$} {:#04x}{:02x}", "CNZ", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xc5 => {println!("PUSH B");},
-            0xc6 => {println!("{:<width$} #{:#04x}", "ADI", bytes[pc+1]); opcode_offset=2;},
-            0xc7 => {println!("RST 0");},
-            0xc8 => {println!("RZ");},
-            0xc9 => {println!("RET");},
-            0xca => {println!("{:<width$} {:#04x}{:02x}", "JZ", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xcb => {println!("{:<width$} {:#04x}{:02x}", "JMP*", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xcc => {println!("{:<width$} {:#04x}{:02x}", "CZ", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xcd => {println!("{:<width$} {:#04x}{:02x}", "CALL", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xce => {println!("{:<width$} #{:#04x}", "ACI", bytes[pc+1]); opcode_offset=2;},
-            0xcf => {println!("RST 1");},
+            0xc0 => {
+                // RNZ - Return if zero flag not set
+                self.ret(!self.registers.f.zero);
+            },
+            0xc1 => {
+                // POP B - Pop addr from stack and copy byte from memory to reg pair BC
+                self.pop("BC");
+            },
+            0xc2 => {
+                // JNZ - Jump if zero flag not set
+                self.jmp(!self.registers.f.zero);
+            },
+            0xc3 => {
+                // JMP - Jump uncoditionally
+                self.jmp(true);
+            },
+            0xc4 => {
+                // CNZ - Call if zero flag not set
+                self.call(!self.registers.f.zero);
+            },
+            0xc5 => {
+                // PUSH B - Push reg pair BC to memory pointed to by SP
+                self.push("BC");
+            },
+            0xc6 => {
+                // ADI - Add immediate value to accumulator
+                self.add(self.mem[self.registers.pc + 1]);
+                self.advance_pc(2);
+            },
+            0xc7 => {
+                // RST 0 - Restart from addr
+                self.rst(0);
+            },
+            0xc8 => {
+                // RZ - Return if zero flag is set
+                self.ret(self.registers.f.zero);
+            },
+            0xc9 => {
+                // RET - Return uncoditionally
+                self.ret(true);
+            },
+            0xca => {
+                // JZ - Jump if zero flag is set
+                self.jmp(self.registers.f.zero);
+            },
+            0xcb => {
+                // JMP* - Jump uncoditionally (alternate)
+                self.jmp(true);
+            },
+            0xcc => {
+                // CZ - Call if zero flag is set
+                self.call(self.registers.f.zero);
+            },
+            0xcd => {
+                // CALL - Call uncoditionally
+                self.call(true);
+            },
+            0xce => {
+                // ACI - Add immediate value to accumulator with carry
+                self.adc(self.mem[self.registers.pc + 1]);
+                self.advance_pc(2);
+            },
+            0xcf => {
+                // RST 1 - Restart from addr
+                self.rst(1);
+            },
     
+            /*
             // 0xdx
             0xd0 => {println!("RNC");},
             0xd1 => {println!("POP D");},
