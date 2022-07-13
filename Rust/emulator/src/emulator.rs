@@ -1551,7 +1551,9 @@ impl Intel8080 {
             0xc6 => {
                 // ADI - Add immediate value to accumulator
                 self.add(self.mem[self.registers.pc + 1]);
-                self.advance_pc(2);
+                
+                // Advance by one because the ADD instructions already advances by one
+                self.advance_pc(1);
             },
             0xc7 => {
                 // RST 0 - Restart from addr
@@ -1584,7 +1586,9 @@ impl Intel8080 {
             0xce => {
                 // ACI - Add immediate value to accumulator with carry
                 self.adc(self.mem[self.registers.pc + 1]);
-                self.advance_pc(2);
+                
+                // Advance by one because the ADC instructions already advances by one
+                self.advance_pc(1);
             },
             0xcf => {
                 // RST 1 - Restart from addr
@@ -1624,7 +1628,9 @@ impl Intel8080 {
             0xd6 => {
                 // SUI - Subtract immediate value from accumulator
                 self.sub(self.mem[self.registers.pc + 1]);
-                self.advance_pc(2);
+                
+                // Advance by one because the SUB instructions already advances by one
+                self.advance_pc(1);
             },
             0xd7 => {
                 // RST 2 - Restart from addr
@@ -1662,32 +1668,102 @@ impl Intel8080 {
             0xde => {
                 // SBI - Subtract immediate value from accumulator with carry
                 self.sbb(self.mem[self.registers.pc + 1]);
-                self.advance_pc(2);
+                
+                // Advance by one because the SBI instructions already advances by one
+                self.advance_pc(1);
             },
             0xdf => {
                 // RST 3 - Restart from addr
                 self.rst(3);
             },
     
-            /*
             // 0xex
-            0xe0 => {println!("RPO");},
-            0xe1 => {println!("POP H");},
-            0xe2 => {println!("{:<width$} {:#04x}{:02x}", "JPO", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xe3 => {println!("XTHL");},
-            0xe4 => {println!("{:<width$} {:#04x}{:02x}", "CPO", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xe5 => {println!("PUSH H");},
-            0xe6 => {println!("{:<width$} #{:#04x}", "ANI", bytes[pc+1]); opcode_offset=2;},
-            0xe7 => {println!("RST 4");},
-            0xe8 => {println!("RPE");},
-            0xe9 => {println!("PCHL");},
-            0xea => {println!("{:<width$} {:#04x}{:02x}", "JPE", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xeb => {println!("XCHG");},
-            0xec => {println!("{:<width$} {:#04x}{:02x}", "CPE", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xed => {println!("{:<width$} {:#04x}{:02x}", "CALL*", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xee => {println!("{:<width$} #{:#04x}", "XRI", bytes[pc+1]); opcode_offset=2;},
-            0xef => {println!("RST 5");},
+            0xe0 => {
+                // RPO - Return if parity flag not set (odd)
+                self.ret(!self.registers.f.parity);
+            },
+            0xe1 => {
+                // POP H - Pop addr from stack and copy byte from memory to reg pair HL
+                self.pop("HL");
+            },
+            0xe2 => {
+                // JPO - Jump if parity flag not set (odd)
+                self.jmp(!self.registers.f.parity);
+            },
+            0xe3 => {
+                // XTHL - Exhange reg pair HL value with word in mem pointed to by SP
+                let mem_val: u16 = self.get_word(false);
+                let hl: u16 = self.registers.get_reg_pair("HL");
+
+                self.registers.set_reg_pair("HL", mem_val);
+                self.mem[self.registers.sp as usize] = hl as u8;
+                self.mem[(self.registers.sp + 1) as usize] = (hl >> 8) as u8;
+
+                self.advance_pc(1);
+            },
+            0xe4 => {
+                // CPO - Call if parity flag not set (odd)
+                self.call(!self.registers.f.parity);
+            },
+            0xe5 => {
+                // PUSH H - Push reg pair HL to memory pointed to by SP
+                self.push("HL");
+            },
+            0xe6 => {
+                // ANI - AND accumulator with immediate value
+                self.ana(self.mem[self.registers.pc + 1]);
+
+                // Advance by one because the ANA instructions already advances by one
+                self.advance_pc(1);
+            },
+            0xe7 => {
+                // RST 4 - Restart from addr
+                self.rst(4);
+            },
+            0xe8 => {
+                // RPE - Return if parity flag set (even)
+                self.ret(self.registers.f.parity);
+            },
+            0xe9 => {
+                // PCHL - Move reg pair HL to PC
+                self.registers.pc = self.registers.get_reg_pair("HL").into();
+                self.advance_pc(1);
+            },
+            0xea => {
+                // JPE - Jump if parity flag set (even)
+                self.jmp(self.registers.f.parity);
+            },
+            0xeb => {
+                // XCHG - Exchange reg pair HL with reg pair DE
+                let hl: u16 = self.registers.get_reg_pair("HL");
+                let de: u16 = self.registers.get_reg_pair("DE");
+
+                self.registers.set_reg_pair("HL", de);
+                self.registers.set_reg_pair("DE", hl);
+
+                self.advance_pc(1);
+            },
+            0xec => {
+                // CPE - Call if parity flag set (even)
+                self.call(self.registers.f.parity);
+            },
+            0xed => {
+                // CALL* - Call uncoditionally (alternate)
+                self.call(true);
+            },
+            0xee => {
+                // XRI - XOR accumulator with immediate value
+                self.xra(self.mem[self.registers.pc + 1]);
+
+                // Advance by one because the XRA instructions already advances by one
+                self.advance_pc(1);
+            },
+            0xef => {
+                // RST 5 - Restart from addr
+                self.rst(5);
+            },
     
+            /*
             // 0xfx
             0xf0 => {println!("RP");},
             0xf1 => {println!("POP PSW");},
@@ -1723,10 +1799,12 @@ impl Intel8080 {
         //self.registers.f.carry = true;
         println!("FLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
+        //println!("HL: {:04X}\n", self.registers.get_reg_pair("HL"));
 
         // Test code goes here
 
         println!("\nFLAGS: {:#?}\n", self.registers.f);
         println!("A: {:08b}\n", self.registers.get_reg("A"));
+        //println!("HL: {:04X}\n", self.registers.get_reg_pair("HL"));
     }
 }
