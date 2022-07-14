@@ -10,6 +10,9 @@ pub struct Intel8080 {
 
     // Flag for when HLT (halt) instruction is executed
     halted: bool,
+
+    // Interrupt system state
+    int: bool
 }
 
 struct Registers {
@@ -29,7 +32,6 @@ struct Registers {
     // Special registers
     sp: u16,    // Stack Pointer
     pc: usize,  // Program Counter
-    int: u8,    // Interrupt enable
 }
 
 #[derive(Debug)]
@@ -96,6 +98,17 @@ impl Registers {
 
         *reg = val;
     }
+
+    pub fn get_psw(&mut self) -> u16 {
+        (self.get_reg("A") as u16) << 8 | self.f.get_flags() as u16
+    }
+
+    pub fn set_psw(&mut self, val: u16) {
+        self.set_reg("A", (val >> 8) as u8);
+
+        let flag_vals: u8 = val as u8;
+        self.f.set_flags(flag_vals);
+    }
 }
 
 impl FlagRegister {
@@ -137,6 +150,28 @@ impl FlagRegister {
         // Check if value has even amount of ones
         self.parity = self.check_parity(val);
     }
+
+    pub fn set_flags(&mut self, val: u8) {
+        self.sign =      (val >> 7) & 0x1 == 1;     // Bit 7
+        self.zero =      (val >> 6) & 0x1 == 1;     // Bit 6
+                                                    // Bit 5 not used
+        self.aux_carry = (val >> 4) & 0x1 == 1;     // Bit 4
+                                                    // Bit 3 not used
+        self.parity =    (val >> 2) & 0x1 == 1;     // Bit 2
+                                                    // Bit 1 not used
+        self.carry =      val       & 0x1 == 1;     // Bit 0
+    }
+
+    pub fn get_flags(&mut self) -> u8 {
+        (self.sign as u8)       << 7 |    // Bit 7
+        (self.zero as u8)       << 6 |    // Bit 6
+        (0x0 as u8)             << 5 |    // Bit 5 always 0
+        (self.aux_carry as u8)  << 4 |    // Bit 4
+        (0x0 as u8)             << 3 |    // Bit 3 always 0
+        (self.parity as u8)     << 2 |    // Bit 2
+        (0x1 as u8)             << 1 |    // Bit 1 always 1
+        (self.carry as u8)                // Bit 0
+    }
 }
 
 impl Intel8080 {
@@ -165,13 +200,13 @@ impl Intel8080 {
         
                 sp: 0x0000,
                 pc: 0x0000,
-                int: 0x00,
             },
     
             // 2^16 = 64KB of memory
             mem: Vec::<u8>::with_capacity(0x10000),
 
             halted: false,
+            int: false
         }
     }
 
@@ -535,13 +570,30 @@ impl Intel8080 {
     // POP reg pair - Pop addr from stack and copy word from memory to reg pair
     fn pop(&mut self, reg_pair: &str) {
         let val: u16 = self.pop_stack();
-        self.registers.set_reg_pair(reg_pair, val);
+
+        // Handle PSW (Program Status Word i.e. reg A + Flag reg) separately
+        if reg_pair == "PSW" {
+            self.registers.set_psw(val);
+        } else {
+            self.registers.set_reg_pair(reg_pair, val);
+        }
+
         self.advance_pc(1);
     }
 
     // PUSH reg pair - Push reg pair to memory pointed to by SP
     fn push(&mut self, reg_pair: &str) {
-        self.push_stack(self.registers.get_reg_pair(reg_pair));
+
+        let mut val: u16 = 0;
+
+        // Handle PSW (Program Status Word i.e. reg A + Flag reg) separately
+        if reg_pair == "PSW" {
+            val = self.registers.get_psw();
+        } else {
+            val = self.registers.get_reg_pair(reg_pair);
+        }
+
+        self.push_stack(val);
         self.advance_pc(1);
     }
 
@@ -1763,26 +1815,81 @@ impl Intel8080 {
                 self.rst(5);
             },
     
-            /*
             // 0xfx
-            0xf0 => {println!("RP");},
-            0xf1 => {println!("POP PSW");},
-            0xf2 => {println!("{:<width$} {:#04x}{:02x}", "JP", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xf3 => {println!("DI");},
-            0xf4 => {println!("{:<width$} {:#04x}{:02x}", "CP", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xf5 => {println!("PUSH PSW");},
-            0xf6 => {println!("{:<width$} #{:#04x}", "ORI", bytes[pc+1]); opcode_offset=2;},
-            0xf7 => {println!("RST 6");},
-            0xf8 => {println!("RM");},
-            0xf9 => {println!("SPHL");},
-            0xfa => {println!("{:<width$} {:#04x}{:02x}", "JM", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xfb => {println!("EI");},
-            0xfc => {println!("{:<width$} {:#04x}{:02x}", "CM", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xfd => {println!("{:<width$} {:#04x}{:02x}", "CALL*", bytes[pc+2], bytes[pc+1]); opcode_offset=3;},
-            0xfe => {println!("{:<width$} #{:#04x}", "CPI", bytes[pc+1]); opcode_offset=2;},
-            0xff => {println!("RST 7");},
-            */
-            _ => {/* Bork */},
+            0xf0 => {
+                // RP - Return if sign flag not set (positive)
+                self.ret(!self.registers.f.sign);
+            },
+            0xf1 => {
+                // POP PSW - Pop addr from stack and copy byte from memory to reg A and Flags
+                self.pop("PSW");
+            },
+            0xf2 => {
+                // JP - Jump if sign flag not set (positive)
+                self.jmp(!self.registers.f.sign);
+            },
+            0xf3 => {
+                // DI - Disable interrupts
+                self.int = false;
+                self.advance_pc(1);
+            },
+            0xf4 => {
+                // CP - Call if sign flag not set (positive)
+                self.call(!self.registers.f.sign);
+            },
+            0xf5 => {
+                // PUSH PSW - Push reg pair HL to memory pointed to by SP
+                self.push("PSW");
+            },
+            0xf6 => {
+                // ORI - OR accumulator with immediate value
+                self.ora(self.mem[self.registers.pc + 1]);
+
+                // Advance by one because the ORA instructions already advances by one
+                self.advance_pc(1);
+
+            },
+            0xf7 => {
+                // RST 6 - Restart from addr
+                self.rst(6);
+            },
+            0xf8 => {
+                // RM - Return if sign flag set (negative)
+                self.ret(self.registers.f.sign);
+            },
+            0xf9 => {
+                // SPHL - Move reg pair HL to SP
+                self.registers.sp = self.registers.get_reg_pair("HL");
+                self.advance_pc(1);
+            },
+            0xfa => {
+                // JM - Jump if sign flag set (negative)
+                self.jmp(self.registers.f.sign);
+            },
+            0xfb => {
+                // EI - Enable interrupts
+                self.int = true;
+                self.advance_pc(1);
+            },
+            0xfc => {
+                // CM - Call if sign flag set (negative)
+                self.call(self.registers.f.sign);
+            },
+            0xfd => {
+                // CALL* - Call uncoditionally (alternate)
+                self.call(true);
+            },
+            0xfe => {
+                // CPI - Compare immediate value with reg A
+                self.cmp(self.mem[self.registers.pc + 1]);
+
+                // Advance by one because the CMP instructions already advances by one
+                self.advance_pc(1);
+            },
+            0xff => {
+                // RST 7 - Restart from addr
+                self.rst(7);
+            },
         };
     }
 
